@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StockSight – LSTM Price Predictor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:      #09090f;
+    --surface: #12121c;
+    --card:    #1a1a28;
+    --border:  #2a2a3e;
+    --accent:  #7c6af7;
+    --green:   #34d399;
+    --red:     #f87171;
+    --yellow:  #fbbf24;
+    --text:    #e2e2f0;
+    --muted:   #6b6b8a;
+    --font-mono: 'Space Mono', monospace;
+    --font-body: 'DM Sans', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); min-height: 100vh; }
+
+  /* ── header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.25rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(18,18,28,.9);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: var(--font-mono); font-size: 1.1rem; color: var(--accent); letter-spacing: -.02em; }
+  .logo span { color: var(--text); }
+  .search-wrap { display: flex; gap: .5rem; }
+  .search-wrap input {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .55rem 1rem; color: var(--text); font-family: var(--font-mono); font-size: .85rem;
+    width: 160px; outline: none; transition: border-color .2s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: .55rem 1.25rem; font-family: var(--font-body); font-size: .85rem; font-weight: 600;
+    cursor: pointer; transition: opacity .2s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn.outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── layout ── */
+  main { max-width: 1280px; margin: 0 auto; padding: 2rem 2.5rem; }
+
+  /* ── ticker bar ── */
+  #ticker-info {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem; margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1rem 1.25rem;
+  }
+  .stat-card .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .35rem; }
+  .stat-card .value { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; }
+  .stat-card .value.up   { color: var(--green); }
+  .stat-card .value.down { color: var(--red); }
+
+  /* ── charts grid ── */
+  .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .chart-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.5rem;
+  }
+  .chart-card h2 { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 1.25rem; }
+  canvas { width: 100% !important; }
+
+  /* ── prediction panel ── */
+  #prediction-panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.5rem; margin-bottom: 1.5rem;
+  }
+  .pred-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .pred-header h2 { font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .signal-badge {
+    font-family: var(--font-mono); font-size: .75rem; font-weight: 700;
+    padding: .3rem .75rem; border-radius: 20px; letter-spacing: .05em;
+  }
+  .signal-badge.buy  { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+  .signal-badge.sell { background: rgba(248,113,113,.15); color: var(--red);   border: 1px solid rgba(248,113,113,.3); }
+  .signal-badge.hold { background: rgba(251,191,36,.15);  color: var(--yellow);border: 1px solid rgba(251,191,36,.3); }
+  .pred-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: .82rem; }
+  .pred-table th { color: var(--muted); font-weight: 400; text-align: left; padding: .4rem .75rem; border-bottom: 1px solid var(--border); }
+  .pred-table td { padding: .55rem .75rem; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .pred-table tr:last-child td { border-bottom: none; }
+  .change-pos { color: var(--green); }
+  .change-neg { color: var(--red); }
+
+  /* ── period selector ── */
+  .period-btns { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  .period-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    padding: .3rem .7rem; font-size: .75rem; color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .period-btn.active, .period-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── loading / empty ── */
+  .placeholder { color: var(--muted); font-size: .85rem; text-align: center; padding: 3rem; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: .5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    header { padding: 1rem 1.25rem; }
+    main   { padding: 1rem 1.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Stock<span>Sight</span></div>
+  <div class="search-wrap">
+    <input id="ticker-input" type="text" placeholder="AAPL" maxlength="8" value="AAPL"/>
+    <button class="btn" onclick="loadStock()">Analyse</button>
+  </div>
+</header>
+
+<main>
+  <div id="ticker-info"><div class="stat-card"><p class="placeholder">Enter a ticker to begin</p></div></div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h2>Price History</h2>
+      <div class="period-btns">
+        <button class="period-btn active" onclick="changePeriod(this,'3mo')">3M</button>
+        <button class="period-btn" onclick="changePeriod(this,'6mo')">6M</button>
+        <button class="period-btn" onclick="changePeriod(this,'1y')">1Y</button>
+        <button class="period-btn" onclick="changePeriod(this,'2y')">2Y</button>
+      </div>
+      <canvas id="priceChart" height="260"></canvas>
+    </div>
+    <div class="chart-card">
+      <h2>RSI (14)</h2>
+      <canvas id="rsiChart" height="260"></canvas>
+    </div>
+  </div>
+
+  <div id="prediction-panel">
+    <div class="pred-header">
+      <h2>🔮 7-Day Forecast</h2>
+      <span id="signal-badge" class="signal-badge hold">HOLD</span>
+    </div>
+    <canvas id="predChart" height="160" style="margin-bottom:1.25rem"></canvas>
+    <table class="pred-table">
+      <thead><tr><th>#</th><th>Date</th><th>Predicted Price</th><th>Change</th></tr></thead>
+      <tbody id="pred-tbody"><tr><td colspan="4" style="color:var(--muted);text-align:center;padding:1.5rem">Load a ticker to see predictions</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+let priceChart, rsiChart, predChart;
+let currentTicker = "";
+let currentPeriod = "3mo";
+
+function changePeriod(btn, period) {
+  document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentPeriod = period;
+  if (currentTicker) loadHistory(currentTicker, period);
+}
+
+async function loadStock() {
+  const ticker = document.getElementById("ticker-input").value.trim().toUpperCase();
+  if (!ticker) return;
+  currentTicker = ticker;
+  loadInfo(ticker);
+  loadHistory(ticker, currentPeriod);
+  loadPredictions(ticker);
+}
+
+async function loadInfo(ticker) {
+  const el = document.getElementById("ticker-info");
+  el.innerHTML = `<div class="stat-card"><p class="placeholder"><span class="spinner"></span>Loading ${ticker}…</p></div>`;
+  try {
+    const r = await fetch(`/api/stock/${ticker}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    el.innerHTML = `
+      ${card("Company", d.name)}
+      ${card("Sector", d.sector)}
+      ${card("Price", "$" + (d.current_price||0).toFixed(2))}
+      ${card("Market Cap", fmtCap(d.market_cap))}
+      ${card("P/E Ratio", (d.pe_ratio||0).toFixed(1))}
+      ${card("52W High", "$" + (d["52w_high"]||0).toFixed(2))}
+      ${card("52W Low",  "$" + (d["52w_low"] ||0).toFixed(2))}
+      ${card("Volume",   fmtVol(d.volume))}`;
+  } catch(e) { el.innerHTML = `<div class="stat-card"><p class="placeholder">Error: ${e.message}</p></div>`; }
+}
+
+async function loadHistory(ticker, period) {
+  try {
+    const r = await fetch(`/api/history/${ticker}?period=${period}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    drawPriceChart(d);
+    drawRSIChart(d);
+  } catch(e) { console.error(e); }
+}
+
+async function loadPredictions(ticker) {
+  const tbody = document.getElementById("pred-tbody");
+  tbody.innerHTML = `<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:1.5rem"><span class="spinner"></span>Forecasting…</td></tr>`;
+  try {
+    const r = await fetch(`/api/predict/${ticker}?days=7`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    drawPredChart(d);
+    renderPredTable(d);
+    const badge = document.getElementById("signal-badge");
+    const sig   = (d.signal || "HOLD").toUpperCase();
+    badge.textContent = sig;
+    badge.className   = "signal-badge " + sig.toLowerCase();
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--red);text-align:center;padding:1.5rem">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function drawPriceChart(d) {
+  if (priceChart) priceChart.destroy();
+  const ctx = document.getElementById("priceChart").getContext("2d");
+  priceChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: d.dates,
+      datasets: [
+        { label: "Close", data: d.close, borderColor: "#7c6af7", borderWidth: 2, pointRadius: 0,
+          fill: true, backgroundColor: "rgba(124,106,247,.08)", tension: 0.3 },
+        { label: "MA 7",  data: d.ma7,   borderColor: "#34d399", borderWidth: 1.5, pointRadius: 0, borderDash: [4,3], tension: 0.3 },
+        { label: "MA 21", data: d.ma21,  borderColor: "#fbbf24", borderWidth: 1.5, pointRadius: 0, borderDash: [4,3], tension: 0.3 },
+      ]
+    },
+    options: chartOpts()
+  });
+}
+
+function drawRSIChart(d) {
+  if (rsiChart) rsiChart.destroy();
+  const ctx = document.getElementById("rsiChart").getContext("2d");
+  rsiChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: d.dates,
+      datasets: [{ label: "RSI", data: d.rsi, borderColor: "#f87171", borderWidth: 1.5, pointRadius: 0, tension: 0.3 }]
+    },
+    options: {
+      ...chartOpts(),
+      plugins: { ...chartOpts().plugins, annotation: {} },
+      scales: {
+        x: chartOpts().scales.x,
+        y: { min: 0, max: 100, ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+             grid: { color: "rgba(255,255,255,.05)" } }
+      }
+    }
+  });
+}
+
+function drawPredChart(d) {
+  if (predChart) predChart.destroy();
+  const ctx = document.getElementById("predChart").getContext("2d");
+  const labels = d.predictions.map(p => p.date);
+  const prices  = d.predictions.map(p => p.price);
+  predChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Predicted Close",
+        data: prices,
+        backgroundColor: prices.map(p => p >= d.last_price ? "rgba(52,211,153,.5)" : "rgba(248,113,113,.5)"),
+        borderColor:     prices.map(p => p >= d.last_price ? "#34d399" : "#f87171"),
+        borderWidth: 1.5, borderRadius: 6,
+      }]
+    },
+    options: { ...chartOpts(), plugins: { legend: { display: false } } }
+  });
+}
+
+function renderPredTable(d) {
+  const tbody = document.getElementById("pred-tbody");
+  tbody.innerHTML = d.predictions.map((p, i) => {
+    const chg     = ((p.price - d.last_price) / d.last_price * 100).toFixed(2);
+    const cls     = chg >= 0 ? "change-pos" : "change-neg";
+    const arrow   = chg >= 0 ? "▲" : "▼";
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${p.date}</td>
+      <td>$${p.price.toFixed(2)}</td>
+      <td class="${cls}">${arrow} ${Math.abs(chg)}%</td>
+    </tr>`;
+  }).join("");
+}
+
+function chartOpts() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 }, boxWidth: 12 } },
+      tooltip: {
+        backgroundColor: "#1a1a28", borderColor: "#2a2a3e", borderWidth: 1,
+        titleColor: "#e2e2f0", bodyColor: "#6b6b8a",
+        titleFont: { family: "Space Mono", size: 11 },
+        bodyFont:  { family: "DM Sans", size: 12 },
+      }
+    },
+    scales: {
+      x: { ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 }, maxTicksLimit: 8 },
+           grid: { display: false } },
+      y: { ticks: { color: "#6b6b8a", font: { family: "Space Mono", size: 10 } },
+           grid: { color: "rgba(255,255,255,.05)" } }
+    }
+  };
+}
+
+function card(label, value) {
+  return `<div class="stat-card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+function fmtCap(n) {
+  if (!n) return "N/A";
+  if (n >= 1e12) return "$" + (n/1e12).toFixed(2) + "T";
+  if (n >= 1e9)  return "$" + (n/1e9).toFixed(2)  + "B";
+  return "$" + (n/1e6).toFixed(2) + "M";
+}
+function fmtVol(n) {
+  if (!n) return "N/A";
+  if (n >= 1e6) return (n/1e6).toFixed(1) + "M";
+  return (n/1e3).toFixed(0) + "K";
+}
+
+// Auto-load AAPL on open
+window.addEventListener("DOMContentLoaded", loadStock);
+</script>
+</body>
+</html>
