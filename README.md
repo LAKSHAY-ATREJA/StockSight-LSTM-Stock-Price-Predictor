@@ -1,151 +1,111 @@
-# 📈 StockSight – LSTM Stock Price Predictor
+# StockSight — LSTM Stock Price Predictor
 
-A full-stack machine learning application that predicts stock prices using an LSTM neural network, with a real-time interactive dashboard built with Flask and Chart.js.
+A full-stack machine learning application that predicts stock prices using a stacked LSTM neural network, with an interactive dashboard built with Flask and Chart.js. No training is required to run the app — an exponential-smoothing fallback predictor is used out of the box, and the LSTM model can be trained on demand per ticker via the API.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-2.15-orange?logo=tensorflow)
-![Flask](https://img.shields.io/badge/Flask-3.0-black?logo=flask)
-![License](https://img.shields.io/badge/License-MIT-green)
-
----
-
-## 🚀 Features
-
-- **LSTM Neural Network** – Stacked LSTM with dropout, trained on 2 years of historical data
-- **Technical Indicators** – RSI, 7-day & 21-day moving averages, volatility, price change %
-- **Real-Time Data** – Live stock data via `yfinance` API
-- **Interactive Dashboard** – Beautiful dark-theme UI with price charts, RSI, and forecast table
-- **Buy / Hold / Sell Signal** – Derived from 7-day predicted trend
-- **REST API** – Clean endpoints for stock info, history, prediction, and model training
-
----
-
-## 🧠 Model Architecture
+## Model architecture
 
 ```
-Input  →  LSTM(128, return_sequences=True)
-        →  Dropout(0.2)
-        →  LSTM(64)
-        →  Dropout(0.2)
-        →  Dense(32, relu)
-        →  Dense(1)          ← predicted closing price
+Input (60 trading days x 10 features)
+    LSTM(128, return_sequences=True) + Dropout(0.2)
+    LSTM(64) + Dropout(0.2)
+    Dense(32, relu)
+    Dense(1)  ->  predicted closing price
 ```
 
-**Features used:** Close, Volume, High, Low, Open, MA-7, MA-21, RSI-14, Price Change %, 10-day Volatility
+Features: Close, Volume, High, Low, Open, 7-day MA, 21-day MA, RSI-14, price change %, 10-day rolling volatility.
 
-**Sequence length:** 60 trading days  
-**Train / Val split:** 80 / 20  
-**Optimizer:** Adam | **Loss:** MSE | **Early stopping:** patience=10
+Train/validation split: 80/20. Optimiser: Adam. Loss: MSE. Early stopping with patience=10.
 
----
+## Features
 
-## 📁 Project Structure
+- LSTM neural network trained on 2 years of historical price data
+- Exponential smoothing fallback predictor (works immediately with no training)
+- Live stock data via the yfinance API
+- Technical indicators: RSI, moving averages, volatility
+- Buy / Hold / Sell signal derived from the 7-day forecast trend
+- REST API for stock info, history, prediction, and model training
+- Interactive dark-theme dashboard with Chart.js price charts, RSI panel, and forecast table
 
-```
-stock-price-predictor/
-├── app.py               # Flask application & REST API
-├── model.py             # LSTM model — training & inference
-├── requirements.txt
-├── saved_models/        # Auto-created after training
-│   ├── AAPL_model.keras
-│   └── AAPL_scaler.pkl
-└── templates/
-    └── index.html       # Full-stack dashboard (Chart.js)
-```
+## Requirements
 
----
+- Python 3.10 or later
 
-## ⚙️ Setup & Run
+## Local setup
 
 ```bash
-# 1. Clone
-git clone https://github.com/YOUR_USERNAME/stock-price-predictor.git
-cd stock-price-predictor
+git clone https://github.com/LAKSHAY-ATREJA/-StockSight-LSTM-Stock-Price-Predictor.git
+cd -StockSight-LSTM-Stock-Price-Predictor
 
-# 2. Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Launch the dashboard
 python app.py
-# → Open http://localhost:5000
 ```
 
-> **No training required to run!** The app uses an exponential-smoothing fallback predictor out of the box. Train the LSTM for better accuracy (see below).
+Open http://localhost:5000 in your browser. Enter any ticker (e.g. AAPL, TSLA, NVDA) to see the dashboard.
 
----
+## Training the LSTM model
 
-## 🏋️ Train the LSTM Model
+The app uses the exponential-smoothing fallback until you train the LSTM. Training fetches 2 years of data, trains the model, and saves it to `saved_models/`.
 
-**Via the command line:**
+From the command line:
+
 ```bash
 python model.py           # trains AAPL by default
 ```
 
-**Via the API:**
+Via the API (while the server is running):
+
 ```bash
 curl -X POST http://localhost:5000/api/train/TSLA
-# Returns: {"status":"success","ticker":"TSLA","rmse":3.42,"mae":2.61}
+# Returns: {"status": "success", "ticker": "TSLA", "rmse": 3.42, "mae": 2.61}
 ```
 
-Trained models are saved to `saved_models/` and automatically used for subsequent predictions.
+Once trained, subsequent predictions for that ticker automatically use the LSTM model.
 
----
+## API reference
 
-## 🔌 API Reference
+| Method | Endpoint                          | Description                                    |
+|--------|-----------------------------------|------------------------------------------------|
+| GET    | /api/stock/AAPL                   | Company info, market cap, P/E ratio            |
+| GET    | /api/history/AAPL?period=1y       | OHLCV data with RSI and moving averages        |
+| GET    | /api/predict/AAPL?days=7          | 7-day price forecast with Buy/Hold/Sell signal |
+| POST   | /api/train/AAPL                   | Train LSTM model, returns RMSE and MAE         |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/stock/<ticker>` | Company info, market cap, P/E |
-| GET | `/api/history/<ticker>?period=1y` | OHLCV + indicators |
-| GET | `/api/predict/<ticker>?days=7` | 7-day price forecast |
-| POST | `/api/train/<ticker>` | Train LSTM & return metrics |
+## Project structure
 
----
+```
+app.py               Flask application and REST API
+model.py             LSTM model: training, feature engineering, inference
+templates/
+    index.html       Interactive dashboard (Chart.js, Vanilla JS)
+requirements.txt     Python dependencies
+saved_models/        Auto-created after training (AAPL_model.keras, AAPL_scaler.pkl)
+```
 
-## 📊 Example Results (AAPL)
+## Typical results (AAPL)
 
-| Metric | Value |
-|--------|-------|
-| RMSE   | ~3.2  |
-| MAE    | ~2.4  |
-| Direction Accuracy | ~65% |
+| Metric             | Value     |
+|--------------------|-----------|
+| RMSE               | ~3.2 USD  |
+| MAE                | ~2.4 USD  |
+| Direction accuracy | ~65%      |
 
----
+## Tech stack
 
-## 🛠️ Tech Stack
+| Component     | Technology                   |
+|---------------|------------------------------|
+| ML model      | TensorFlow / Keras LSTM      |
+| Data          | yfinance, Pandas, NumPy      |
+| Feature eng.  | scikit-learn MinMaxScaler    |
+| Backend       | Flask, Flask-CORS, Gunicorn  |
+| Frontend      | Chart.js, Vanilla JS         |
 
-| Layer | Technology |
-|-------|------------|
-| ML Model | TensorFlow / Keras LSTM |
-| Data | yfinance, Pandas, NumPy |
-| Feature Eng. | scikit-learn (MinMaxScaler) |
-| Backend | Flask, Flask-CORS |
-| Frontend | Chart.js, Vanilla JS |
-| Deployment | Gunicorn (production) |
+## Disclaimer
 
----
+This project is for educational purposes only. Predictions are statistical estimates, not financial advice. Do not make investment decisions based solely on this tool.
 
-## 🔮 Future Improvements
+## License
 
-- [ ] Sentiment analysis from financial news (FinBERT)
-- [ ] Portfolio-level multi-ticker comparison
-- [ ] Backtesting engine with Sharpe ratio
-- [ ] WebSocket live price streaming
-- [ ] Docker containerisation
-- [ ] Deploy to Render / Railway / Fly.io
-
----
-
-## ⚠️ Disclaimer
-
-This project is for **educational purposes only**. Predictions are not financial advice. Do not make investment decisions based solely on model output.
-
----
-
-## 📄 License
-
-MIT © Lakshay Atreja
+MIT. Built by Lakshay Atreja.
