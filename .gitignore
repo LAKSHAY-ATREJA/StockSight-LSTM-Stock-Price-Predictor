@@ -1,8 +1,30 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
 .venv/
 venv/
+env/
+
+# Saved models (large binary files)
 saved_models/
 *.keras
 *.h5
 *.pkl
+
+# Environment variables
+.env
+
+# Demo output charts
+*_forecast.png
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

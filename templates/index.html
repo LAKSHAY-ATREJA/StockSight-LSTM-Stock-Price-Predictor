@@ -151,8 +151,12 @@
 
   <div id="prediction-panel">
     <div class="pred-header">
-      <h2>🔮 7-Day Forecast</h2>
-      <span id="signal-badge" class="signal-badge hold">HOLD</span>
+      <h2>7-Day Forecast</h2>
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <span id="method-badge" style="font-size:.72rem;color:var(--muted);font-family:var(--font-mono)"></span>
+        <span id="signal-badge" class="signal-badge hold">HOLD</span>
+        <button class="btn outline" id="train-btn" onclick="trainModel()" style="font-size:.75rem;padding:.3rem .75rem">Train LSTM</button>
+      </div>
     </div>
     <canvas id="predChart" height="160" style="margin-bottom:1.25rem"></canvas>
     <table class="pred-table">
@@ -225,8 +229,30 @@ async function loadPredictions(ticker) {
     const sig   = (d.signal || "HOLD").toUpperCase();
     badge.textContent = sig;
     badge.className   = "signal-badge " + sig.toLowerCase();
+
+    const methodEl = document.getElementById("method-badge");
+    if (methodEl && d.method) methodEl.textContent = d.method;
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="4" style="color:var(--red);text-align:center;padding:1.5rem">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function trainModel() {
+  if (!currentTicker) return;
+  const btn = document.getElementById("train-btn");
+  btn.disabled = true;
+  btn.textContent = "Training...";
+  try {
+    const r = await fetch(`/api/train/${currentTicker}`, { method: "POST" });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    alert(`LSTM trained for ${d.ticker}. RMSE: $${d.rmse}  MAE: $${d.mae}`);
+    loadPredictions(currentTicker);
+  } catch(e) {
+    alert("Training failed: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Train LSTM";
   }
 }
 
