@@ -1,11 +1,9 @@
 # StockSight — LSTM Stock Price Predictor
 
-StockSight is a machine-learning application that predicts short-term stock closing prices using a stacked LSTM neural network. It exposes a REST API and an interactive browser dashboard where you can look up any ticker, view technical indicators, and see a 7-day price forecast with a Buy / Hold / Sell signal.
+StockSight is a machine-learning application that predicts short-term stock closing prices using a stacked LSTM neural network. It exposes a REST API and an interactive browser dashboard where you can look up any ticker, view technical indicators, and see a 7-day price forecast with a Buy / Hold / Sell signal. **[Launch Live Demo](https://stocksight-lstm-stock-price-predictor.onrender.com)**
 
 The app works immediately after installation: an exponential-smoothing + linear-trend fallback predictor is active out of the box. The LSTM model can be trained on demand for any ticker via a single API call or command, after which the richer model is used automatically.
 
-## Live Demo
-[View Live Demo](https://stocksight-lstm-stock-price-predictor.onrender.com)
 ---
 
 ## Model architecture
