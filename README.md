@@ -1,8 +1,8 @@
 # StockSight — LSTM Stock Price Predictor
 
-**[▶ Live Demo — Open App](https://stocksight-lstm-stock-price-predictor.onrender.com)**
+**[▶ Explore the hosted StockSight dashboard](https://stocksight-lstm-stock-price-predictor.onrender.com)**
 
-StockSight is a machine-learning application that predicts short-term stock closing prices using a stacked LSTM neural network. It exposes a REST API and an interactive browser dashboard where you can look up any ticker, view technical indicators, and see a 7-day price forecast with a Buy / Hold / Sell signal. **[Launch Live Demo](https://stocksight-lstm-stock-price-predictor.onrender.com)**
+StockSight is a machine-learning application that predicts short-term stock closing prices using a stacked LSTM neural network. It exposes a REST API and an interactive browser dashboard where you can look up any ticker, view technical indicators, and see a 7-day price forecast with a Buy / Hold / Sell signal. 
 
 The app works immediately after installation: an exponential-smoothing + linear-trend fallback predictor is active out of the box. The LSTM model can be trained on demand for any ticker via a single API call or command, after which the richer model is used automatically.
 
@@ -75,8 +75,8 @@ Dense(1)  -->  predicted closing price (USD)
 ## Installation
 
 ```bash
-git clone https://github.com/LAKSHAY-ATREJA/-StockSight-LSTM-Stock-Price-Predictor.git
-cd -StockSight-LSTM-Stock-Price-Predictor
+git clone https://github.com/LAKSHAY-ATREJA/StockSight-LSTM-Stock-Price-Predictor.git
+cd StockSight-LSTM-Stock-Price-Predictor
 
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
