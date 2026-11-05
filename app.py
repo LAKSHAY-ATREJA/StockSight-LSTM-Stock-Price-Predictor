@@ -25,19 +25,75 @@ DEBUG = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def get_stock_info(ticker: str) -> dict:
+    """Best-effort company fundamentals with a historical-price fallback.
+
+    Yahoo Finance's info endpoint can omit quoteType or fail independently
+    of its OHLCV endpoint. Missing optional metadata is not evidence that a
+    valid listed ticker does not exist.
+    """
     stock = yf.Ticker(ticker)
-    info  = stock.info
-    if not info or info.get("quoteType") is None:
-        raise ValueError(f"Ticker '{ticker}' not found or returned no data.")
+    info = {}
+    try:
+        response = stock.info
+        if isinstance(response, dict):
+            info = response
+    except Exception as exc:
+        logger.warning("Fundamental metadata unavailable for %s: %s", ticker, type(exc).__name__)
+
+    history = pd.DataFrame()
+    try:
+        history = stock.history(period="1y", auto_adjust=True)
+    except Exception as exc:
+        logger.warning("Historical metadata fallback unavailable for %s: %s", ticker, type(exc).__name__)
+
+    def finite_number(value):
+        try:
+            number = float(value)
+            return number if np.isfinite(number) else 0.0
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+
+    price_history = pd.DataFrame()
+    if isinstance(history, pd.DataFrame) and not history.empty and "Close" in history:
+        required = [col for col in ("Close", "High", "Low", "Volume") if col in history.columns]
+        price_history = history[required].copy()
+        price_history["Close"] = pd.to_numeric(price_history["Close"], errors="coerce")
+        price_history = price_history.replace([np.inf, -np.inf], np.nan)
+        price_history = price_history.dropna(subset=["Close"])
+        price_history = price_history[price_history["Close"] > 0]
+
+    has_metadata = any(info.get(field) for field in (
+        "longName", "shortName", "currentPrice", "regularMarketPrice",
+        "marketCap", "fiftyTwoWeekHigh"
+    ))
+    if price_history.empty and not has_metadata:
+        raise ValueError(f"No market data is currently available for {ticker}. Please retry later.")
+
+    def recent_value(column, operation, default):
+        if column not in price_history or price_history.empty:
+            return default
+        values = pd.to_numeric(price_history[column], errors="coerce").dropna()
+        if values.empty:
+            return default
+        return finite_number(operation(values.tail(252)))
+
+    last_close = recent_value("Close", lambda values: values.iloc[-1], 0.0)
+    latest_volume = recent_value("Volume", lambda values: values.iloc[-1], 0.0)
     return {
-        "name":          info.get("longName", ticker),
-        "sector":        info.get("sector", "N/A"),
-        "market_cap":    info.get("marketCap", 0) or 0,
-        "pe_ratio":      info.get("trailingPE", 0) or 0,
-        "52w_high":      info.get("fiftyTwoWeekHigh", 0) or 0,
-        "52w_low":       info.get("fiftyTwoWeekLow", 0) or 0,
-        "current_price": info.get("currentPrice", 0) or 0,
-        "volume":        info.get("volume", 0) or 0,
+        "name": info.get("longName") or info.get("shortName") or ticker,
+        "sector": info.get("sector") or "N/A",
+        "market_cap": finite_number(info.get("marketCap")),
+        "pe_ratio": finite_number(info.get("trailingPE")),
+        "52w_high": finite_number(info.get("fiftyTwoWeekHigh")) or recent_value(
+            "High", lambda values: values.max(), last_close
+        ),
+        "52w_low": finite_number(info.get("fiftyTwoWeekLow")) or recent_value(
+            "Low", lambda values: values.min(), last_close
+        ),
+        "current_price": last_close or finite_number(
+            info.get("currentPrice") or info.get("regularMarketPrice")
+        ),
+        "volume": latest_volume or finite_number(info.get("volume")),
     }
 
 
@@ -141,9 +197,12 @@ def stock_info(ticker):
         return jsonify({"error": "Invalid ticker symbol"}), 400
     try:
         return jsonify(get_stock_info(ticker))
-    except Exception as e:
-        logger.warning("stock_info error for %s: %s", ticker, e)
-        return jsonify({"error": str(e)}), 500
+    except ValueError as exc:
+        logger.warning("stock_info unavailable for %s: %s", ticker, exc)
+        return jsonify({"error": str(exc)}), 503
+    except Exception as exc:
+        logger.exception("stock_info unexpected error for %s", ticker)
+        return jsonify({"error": "Market data is temporarily unavailable. Please retry."}), 503
 
 
 @app.route("/api/history/<ticker>")
